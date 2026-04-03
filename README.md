@@ -16,6 +16,8 @@ Optional runtime flags:
 ## Sample config
 
 ```yaml
+priority_provider: tmdb # allowed: tmdb | imdb, default: tmdb
+
 imdb:
   api_key: "your-imdb-api-key"
 tmdb:

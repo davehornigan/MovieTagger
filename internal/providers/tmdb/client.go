@@ -96,6 +96,44 @@ func (c *Client) SearchMovie(ctx context.Context, candidate model.ProviderSearch
 	)
 }
 
+func (c *Client) ResolveByKnownIDs(ctx context.Context, candidate model.ProviderSearchCandidate) ([]model.SelectedMatchResult, error) {
+	if c.logger != nil {
+		c.logger.LogProviderCall(model.ProviderTMDb, "resolve_by_known_ids")
+	}
+
+	if tmdbID := strings.TrimSpace(candidate.KnownIDs.TMDbID); tmdbID != "" {
+		return providers.DoWithRetry(
+			ctx,
+			c.logger,
+			model.ProviderTMDb,
+			"resolve_by_known_ids",
+			c.retryCount,
+			c.baseBackoff,
+			c.sleep,
+			func() ([]model.SelectedMatchResult, error) {
+				return c.resolveByTMDbID(ctx, tmdbID, candidate.Kind)
+			},
+		)
+	}
+
+	if imdbID := strings.TrimSpace(candidate.KnownIDs.IMDbID); imdbID != "" {
+		return providers.DoWithRetry(
+			ctx,
+			c.logger,
+			model.ProviderTMDb,
+			"resolve_by_known_ids",
+			c.retryCount,
+			c.baseBackoff,
+			c.sleep,
+			func() ([]model.SelectedMatchResult, error) {
+				return c.resolveByIMDbID(ctx, imdbID, candidate.Kind)
+			},
+		)
+	}
+
+	return []model.SelectedMatchResult{}, nil
+}
+
 func (c *Client) SearchSeries(ctx context.Context, candidate model.ProviderSearchCandidate) ([]model.SelectedMatchResult, error) {
 	if c.logger != nil {
 		c.logger.LogProviderCall(model.ProviderTMDb, "search_series")
@@ -123,6 +161,76 @@ func (c *Client) SearchSeries(ctx context.Context, candidate model.ProviderSearc
 			return mapSeriesResults(resp.Results), nil
 		},
 	)
+}
+
+func (c *Client) resolveByTMDbID(ctx context.Context, tmdbID string, kind model.MediaKind) ([]model.SelectedMatchResult, error) {
+	q := url.Values{}
+	q.Set("api_key", c.apiKey)
+	q.Set("append_to_response", "external_ids")
+
+	switch kind {
+	case model.MediaKindMovie:
+		var resp movieDetailResponse
+		if err := c.getJSON(ctx, "/3/movie/"+tmdbID, q, &resp); err != nil {
+			var hsErr httpStatusError
+			if errors.As(err, &hsErr) && hsErr.StatusCode == http.StatusNotFound {
+				return []model.SelectedMatchResult{}, nil
+			}
+			return nil, err
+		}
+		m := mapMovieDetail(resp)
+		if m.Title == "" {
+			return []model.SelectedMatchResult{}, nil
+		}
+		return []model.SelectedMatchResult{m}, nil
+	case model.MediaKindSeries:
+		var resp tvDetailResponse
+		if err := c.getJSON(ctx, "/3/tv/"+tmdbID, q, &resp); err != nil {
+			var hsErr httpStatusError
+			if errors.As(err, &hsErr) && hsErr.StatusCode == http.StatusNotFound {
+				return []model.SelectedMatchResult{}, nil
+			}
+			return nil, err
+		}
+		m := mapTVDetail(resp)
+		if m.Title == "" {
+			return []model.SelectedMatchResult{}, nil
+		}
+		return []model.SelectedMatchResult{m}, nil
+	default:
+		return []model.SelectedMatchResult{}, nil
+	}
+}
+
+func (c *Client) resolveByIMDbID(ctx context.Context, imdbID string, kind model.MediaKind) ([]model.SelectedMatchResult, error) {
+	q := url.Values{}
+	q.Set("api_key", c.apiKey)
+	q.Set("external_source", "imdb_id")
+	var resp findByExternalIDResponse
+	if err := c.getJSON(ctx, "/3/find/"+url.PathEscape(imdbID), q, &resp); err != nil {
+		var hsErr httpStatusError
+		if errors.As(err, &hsErr) && hsErr.StatusCode == http.StatusNotFound {
+			return []model.SelectedMatchResult{}, nil
+		}
+		return nil, err
+	}
+
+	switch kind {
+	case model.MediaKindMovie:
+		results := mapMovieResults(resp.MovieResults)
+		for i := range results {
+			results[i].IDs.IMDbID = imdbID
+		}
+		return results, nil
+	case model.MediaKindSeries:
+		results := mapSeriesResults(resp.TVResults)
+		for i := range results {
+			results[i].IDs.IMDbID = imdbID
+		}
+		return results, nil
+	default:
+		return []model.SelectedMatchResult{}, nil
+	}
 }
 
 func (c *Client) LookupEpisode(ctx context.Context, series model.SelectedMatchResult, episode model.EpisodeInfo) (model.SelectedMatchResult, error) {

@@ -133,9 +133,10 @@ func (s *Scanner) Scan(ctx context.Context, scanDir string) (err error) {
 
 func (s *Scanner) matchAll(ctx context.Context, scanResult model.ScanResult) ([]model.SelectedItemMatch, int, int, error) {
 	m := matcher.New(matcher.Options{
-		NoInteractive: s.opts.NoInteractive,
-		Selector:      s.opts.Selector,
-		Logger:        s.opts.Logger,
+		NoInteractive:     s.opts.NoInteractive,
+		Selector:          s.opts.Selector,
+		Logger:            s.opts.Logger,
+		PreferredProvider: s.opts.Config.PriorityProvider,
 	})
 
 	selected := make([]model.SelectedItemMatch, 0)
@@ -201,12 +202,20 @@ func (s *Scanner) queryCandidates(ctx context.Context, item model.ScanResultItem
 	for _, provider := range s.opts.Providers {
 		switch item.Kind {
 		case model.MediaKindMovie:
-			res, err := provider.MovieSeriesClient().SearchMovie(ctx, model.ProviderSearchCandidate{
+			searchCandidate := model.ProviderSearchCandidate{
 				Provider:   provider.Kind(),
 				Kind:       model.MediaKindMovie,
 				QueryTitle: item.Parsed.TitleHint,
 				QueryYear:  item.Parsed.YearHint,
-			})
+				KnownIDs:   item.Parsed.ExistingFileIDs,
+			}
+			if exact, ok, err := s.resolveByKnownIDs(ctx, provider, searchCandidate); err != nil {
+				return nil, fmt.Errorf("provider %s movie id resolve failed: %w", provider.Kind(), err)
+			} else if ok {
+				candidates = append(candidates, exact...)
+				continue
+			}
+			res, err := provider.MovieSeriesClient().SearchMovie(ctx, searchCandidate)
 			if err != nil {
 				return nil, fmt.Errorf("provider %s movie search failed: %w", provider.Kind(), err)
 			}
@@ -216,12 +225,20 @@ func (s *Scanner) queryCandidates(ctx context.Context, item model.ScanResultItem
 			if queryTitle == "" {
 				queryTitle = filepath.Base(item.Path)
 			}
-			res, err := provider.MovieSeriesClient().SearchSeries(ctx, model.ProviderSearchCandidate{
+			searchCandidate := model.ProviderSearchCandidate{
 				Provider:   provider.Kind(),
 				Kind:       model.MediaKindSeries,
 				QueryTitle: queryTitle,
 				QueryYear:  item.Parsed.YearHint,
-			})
+				KnownIDs:   item.Parsed.ExistingFileIDs,
+			}
+			if exact, ok, err := s.resolveByKnownIDs(ctx, provider, searchCandidate); err != nil {
+				return nil, fmt.Errorf("provider %s series id resolve failed: %w", provider.Kind(), err)
+			} else if ok {
+				candidates = append(candidates, exact...)
+				continue
+			}
+			res, err := provider.MovieSeriesClient().SearchSeries(ctx, searchCandidate)
 			if err != nil {
 				return nil, fmt.Errorf("provider %s series search failed: %w", provider.Kind(), err)
 			}
@@ -245,6 +262,28 @@ func (s *Scanner) queryCandidates(ctx context.Context, item model.ScanResultItem
 	}
 
 	return candidates, nil
+}
+
+func (s *Scanner) resolveByKnownIDs(
+	ctx context.Context,
+	provider providers.MetadataProvider,
+	candidate model.ProviderSearchCandidate,
+) ([]model.SelectedMatchResult, bool, error) {
+	if !candidate.KnownIDs.HasAny() {
+		return nil, false, nil
+	}
+	idAware, ok := provider.MovieSeriesClient().(providers.IDAwareMovieSeriesLookupClient)
+	if !ok {
+		return nil, false, nil
+	}
+	res, err := idAware.ResolveByKnownIDs(ctx, candidate)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(res) == 0 {
+		return nil, false, nil
+	}
+	return res, true, nil
 }
 
 func hasEpisodeCandidate(c model.SelectedMatchResult) bool {

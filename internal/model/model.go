@@ -78,6 +78,7 @@ type ProviderSearchCandidate struct {
 	QueryTitle string
 	QueryYear  int
 	Episode    *EpisodeInfo
+	KnownIDs   ProviderTags
 }
 
 // SelectedMatchResult is the resolved metadata chosen by planner/user.

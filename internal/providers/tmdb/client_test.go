@@ -104,6 +104,76 @@ func TestClient_LookupEpisode_AllowsMissingEpisodeIDsForLaterSkip(t *testing.T) 
 	}
 }
 
+func TestClient_ResolveByKnownIDs_UsesTMDbIDAndReturnsIMDbID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/3/tv/1399" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if r.URL.Query().Get("append_to_response") != "external_ids" {
+			t.Fatalf("expected external ids append")
+		}
+		_, _ = w.Write([]byte(`{"id":1399,"name":"Game of Thrones","original_name":"Game of Thrones","first_air_date":"2011-04-17","external_ids":{"imdb_id":"tt0944947"}}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(Options{
+		APIKey:      "k",
+		BaseURL:     srv.URL,
+		RetryCount:  3,
+		BaseBackoff: time.Millisecond,
+		Sleep:       func(time.Duration) {},
+	})
+
+	got, err := c.ResolveByKnownIDs(context.Background(), model.ProviderSearchCandidate{
+		Kind:     model.MediaKindSeries,
+		KnownIDs: model.ProviderTags{TMDbID: "1399"},
+	})
+	if err != nil {
+		t.Fatalf("ResolveByKnownIDs error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(got))
+	}
+	if got[0].IDs.TMDbID != "1399" || got[0].IDs.IMDbID != "tt0944947" {
+		t.Fatalf("unexpected ids: %+v", got[0].IDs)
+	}
+}
+
+func TestClient_ResolveByKnownIDs_UsesIMDbIDFindEndpoint(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/3/find/tt0944947" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if r.URL.Query().Get("external_source") != "imdb_id" {
+			t.Fatalf("expected external_source=imdb_id")
+		}
+		_, _ = w.Write([]byte(`{"movie_results":[],"tv_results":[{"id":1399,"name":"Game of Thrones","original_name":"Game of Thrones","first_air_date":"2011-04-17"}]}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(Options{
+		APIKey:      "k",
+		BaseURL:     srv.URL,
+		RetryCount:  3,
+		BaseBackoff: time.Millisecond,
+		Sleep:       func(time.Duration) {},
+	})
+
+	got, err := c.ResolveByKnownIDs(context.Background(), model.ProviderSearchCandidate{
+		Kind:     model.MediaKindSeries,
+		KnownIDs: model.ProviderTags{IMDbID: "tt0944947"},
+	})
+	if err != nil {
+		t.Fatalf("ResolveByKnownIDs error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(got))
+	}
+	if got[0].IDs.IMDbID != "tt0944947" || got[0].IDs.TMDbID != "1399" {
+		t.Fatalf("unexpected ids: %+v", got[0].IDs)
+	}
+}
+
 func TestClient_RetryAndFatalOnFailure(t *testing.T) {
 	var calls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

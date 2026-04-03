@@ -18,9 +18,10 @@ type ProviderConfig struct {
 
 // Config contains runtime settings loaded from YAML.
 type Config struct {
-	Path string         `yaml:"-"`
-	IMDb ProviderConfig `yaml:"imdb"`
-	TMDb ProviderConfig `yaml:"tmdb"`
+	Path             string             `yaml:"-"`
+	PriorityProvider model.ProviderKind `yaml:"priority_provider"`
+	IMDb             ProviderConfig     `yaml:"imdb"`
+	TMDb             ProviderConfig     `yaml:"tmdb"`
 }
 
 // ProviderStatus describes if a provider can be used for this run.
@@ -76,7 +77,10 @@ func (c Config) EnabledProviders() []model.ProviderKind {
 }
 
 func Load(path string) (Config, error) {
-	cfg := Config{Path: path}
+	cfg := Config{
+		Path:             path,
+		PriorityProvider: model.ProviderTMDb,
+	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -97,6 +101,7 @@ func Load(path string) (Config, error) {
 	cfg.Path = path
 	cfg.IMDb.APIKey = strings.TrimSpace(cfg.IMDb.APIKey)
 	cfg.TMDb.APIKey = strings.TrimSpace(cfg.TMDb.APIKey)
+	cfg.PriorityProvider = normalizePriorityProvider(cfg.PriorityProvider)
 	return cfg, nil
 }
 
@@ -131,5 +136,16 @@ func ResolveProviderAvailability(cfg Config, disableIMDb, disableTMDB bool) Prov
 	return ProviderAvailability{
 		IMDb: statusIMDb,
 		TMDb: statusTMDb,
+	}
+}
+
+func normalizePriorityProvider(v model.ProviderKind) model.ProviderKind {
+	switch model.ProviderKind(strings.ToLower(strings.TrimSpace(string(v)))) {
+	case model.ProviderIMDb:
+		return model.ProviderIMDb
+	case model.ProviderTMDb:
+		return model.ProviderTMDb
+	default:
+		return model.ProviderTMDb
 	}
 }

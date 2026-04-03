@@ -12,6 +12,12 @@ type MovieSeriesLookupClient interface {
 	SearchSeries(ctx context.Context, candidate model.ProviderSearchCandidate) ([]model.SelectedMatchResult, error)
 }
 
+// IDAwareMovieSeriesLookupClient can resolve exact movie/series candidates using known IDs.
+// Implementations may return an empty slice when ID-based resolution is not possible.
+type IDAwareMovieSeriesLookupClient interface {
+	ResolveByKnownIDs(ctx context.Context, candidate model.ProviderSearchCandidate) ([]model.SelectedMatchResult, error)
+}
+
 // EpisodeLookupClient resolves episode-level metadata.
 type EpisodeLookupClient interface {
 	LookupEpisode(ctx context.Context, series model.SelectedMatchResult, episode model.EpisodeInfo) (model.SelectedMatchResult, error)

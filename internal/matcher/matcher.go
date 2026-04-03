@@ -25,9 +25,10 @@ const (
 )
 
 type Options struct {
-	NoInteractive bool
-	Selector      interactive.Selector
-	Logger        logging.Logger
+	NoInteractive     bool
+	Selector          interactive.Selector
+	Logger            logging.Logger
+	PreferredProvider model.ProviderKind
 
 	// AmbiguityDelta defines how close the top two scores can be and still be
 	// considered ambiguous.
@@ -53,6 +54,9 @@ type SelectionOutcome struct {
 func New(opts Options) *Matcher {
 	if opts.AmbiguityDelta <= 0 {
 		opts.AmbiguityDelta = defaultAmbiguityDelta
+	}
+	if opts.PreferredProvider != model.ProviderIMDb && opts.PreferredProvider != model.ProviderTMDb {
+		opts.PreferredProvider = model.ProviderTMDb
 	}
 	return &Matcher{opts: opts}
 }
@@ -105,6 +109,24 @@ func (m *Matcher) Select(ctx context.Context, item model.ScanResultItem, candida
 		}, nil
 	}
 
+	if selected, ok := m.preferOnePerProvider(candidates); ok {
+		for _, r := range ranked {
+			if r.Candidate.Provider == selected.Provider &&
+				r.Candidate.ProviderReference == selected.ProviderReference &&
+				r.Candidate.Title == selected.Title &&
+				r.Candidate.Year == selected.Year {
+				selected.Confidence = r.Score
+				break
+			}
+		}
+		return SelectionOutcome{
+			Status:    SelectionStatusSelected,
+			Selected:  &selected,
+			Ambiguous: true,
+			Ranked:    ranked,
+		}, nil
+	}
+
 	if m.opts.NoInteractive || m.opts.Selector == nil {
 		if m.opts.Logger != nil {
 			m.opts.Logger.LogSkip(item.Path, "ambiguous match with no interactive selection")
@@ -136,6 +158,38 @@ func (m *Matcher) Select(ctx context.Context, item model.ScanResultItem, candida
 	}, nil
 }
 
+func (m *Matcher) preferOnePerProvider(candidates []model.SelectedMatchResult) (model.SelectedMatchResult, bool) {
+	if len(candidates) != 2 {
+		return model.SelectedMatchResult{}, false
+	}
+	var imdb *model.SelectedMatchResult
+	var tmdb *model.SelectedMatchResult
+	for i := range candidates {
+		c := candidates[i]
+		switch c.Provider {
+		case model.ProviderIMDb:
+			if imdb != nil {
+				return model.SelectedMatchResult{}, false
+			}
+			imdb = &c
+		case model.ProviderTMDb:
+			if tmdb != nil {
+				return model.SelectedMatchResult{}, false
+			}
+			tmdb = &c
+		default:
+			return model.SelectedMatchResult{}, false
+		}
+	}
+	if imdb == nil || tmdb == nil {
+		return model.SelectedMatchResult{}, false
+	}
+	if m.opts.PreferredProvider == model.ProviderIMDb {
+		return *imdb, true
+	}
+	return *tmdb, true
+}
+
 func ScoreCandidate(item model.ScanResultItem, candidate model.SelectedMatchResult) float64 {
 	score := 0.0
 
@@ -157,8 +211,38 @@ func ScoreCandidate(item model.ScanResultItem, candidate model.SelectedMatchResu
 
 	// Episode coordinates for episode matching.
 	score += scoreEpisode(item.Parsed.Episode, candidate.Episode)
+	score += scoreKnownIDs(item.Parsed, candidate)
 
 	return score
+}
+
+func scoreKnownIDs(parsed model.ParsedFilenameInfo, candidate model.SelectedMatchResult) float64 {
+	score := 0.0
+	score += scoreTagMatch(parsed.ExistingFileIDs.IMDbID, candidate.IDs.IMDbID, model.ProviderIMDb, candidate.Provider)
+	score += scoreTagMatch(parsed.ExistingFileIDs.TMDbID, candidate.IDs.TMDbID, model.ProviderTMDb, candidate.Provider)
+	score += scoreTagMatch(parsed.ExistingEpisodeIDs.IMDbID, candidate.EpisodeIDs.IMDbID, model.ProviderIMDb, candidate.Provider)
+	score += scoreTagMatch(parsed.ExistingEpisodeIDs.TMDbID, candidate.EpisodeIDs.TMDbID, model.ProviderTMDb, candidate.Provider)
+	return score
+}
+
+func scoreTagMatch(known string, candidateID string, candidateProvider model.ProviderKind, provider model.ProviderKind) float64 {
+	known = strings.TrimSpace(strings.ToLower(known))
+	if known == "" {
+		return 0
+	}
+	candidateID = strings.TrimSpace(strings.ToLower(candidateID))
+	if candidateID == "" {
+		// Mild penalty when provider should know its own ID but does not return it.
+		if provider == candidateProvider {
+			return -2.0
+		}
+		return 0
+	}
+	if candidateID == known {
+		return 20.0
+	}
+	// Strong mismatch penalty for conflicting known IDs.
+	return -20.0
 }
 
 func scoreYear(localYear int, providerYear int) float64 {

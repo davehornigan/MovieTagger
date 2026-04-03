@@ -1,3 +1,5 @@
+priority_provider: tmdb
+
 imdb:
   api_key: "your-imdb-api-key"
 tmdb:

@@ -74,6 +74,72 @@ func (c *Client) SearchSeries(ctx context.Context, candidate model.ProviderSearc
 	return c.search(ctx, "search_series", candidate.QueryTitle, "series")
 }
 
+func (c *Client) ResolveByKnownIDs(ctx context.Context, candidate model.ProviderSearchCandidate) ([]model.SelectedMatchResult, error) {
+	imdbID := strings.TrimSpace(candidate.KnownIDs.IMDbID)
+	if imdbID == "" {
+		return []model.SelectedMatchResult{}, nil
+	}
+
+	operation := "resolve_by_known_ids"
+	if c.logger != nil {
+		c.logger.LogProviderCall(model.ProviderIMDb, operation)
+	}
+
+	result, err := providers.DoWithRetry(
+		ctx,
+		c.logger,
+		model.ProviderIMDb,
+		operation,
+		c.retryCount,
+		c.baseBackoff,
+		c.sleep,
+		func() (model.SelectedMatchResult, error) {
+			query := url.Values{}
+			query.Set("apikey", c.apiKey)
+			query.Set("i", imdbID)
+
+			var resp omdbTitleResponse
+			if err := c.get(ctx, query, &resp); err != nil {
+				return model.SelectedMatchResult{}, err
+			}
+			if !resp.IsSuccess() {
+				if isNotFoundAPIError(resp.Error) {
+					return model.SelectedMatchResult{}, nil
+				}
+				return model.SelectedMatchResult{}, fmt.Errorf("imdb api: %s", resp.Error)
+			}
+
+			kind := parseOMDbType(resp.Type)
+			if candidate.Kind != model.MediaKindUnknown && kind != candidate.Kind {
+				return model.SelectedMatchResult{}, nil
+			}
+
+			title := strings.TrimSpace(resp.Title)
+			if title == "" {
+				return model.SelectedMatchResult{}, nil
+			}
+			return model.SelectedMatchResult{
+				Provider:      model.ProviderIMDb,
+				Kind:          kind,
+				Title:         title,
+				OriginalTitle: title,
+				Year:          parseYear(resp.Year),
+				IDs: model.ProviderTags{
+					IMDbID: strings.TrimSpace(resp.IMDbID),
+				},
+				ProviderReference: strings.TrimSpace(resp.IMDbID),
+			}, nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if result.Title == "" && !result.IDs.HasAny() {
+		return []model.SelectedMatchResult{}, nil
+	}
+	return []model.SelectedMatchResult{result}, nil
+}
+
 func (c *Client) LookupEpisode(ctx context.Context, series model.SelectedMatchResult, episode model.EpisodeInfo) (model.SelectedMatchResult, error) {
 	seriesID := series.ProviderReference
 	if seriesID == "" {
@@ -163,7 +229,7 @@ func (c *Client) search(ctx context.Context, operation string, queryTitle string
 				return nil, err
 			}
 			if !resp.IsSuccess() {
-				if isNotFoundAPIError(resp.Error) {
+				if isNonFatalSearchAPIError(resp.Error) {
 					return []model.SelectedMatchResult{}, nil
 				}
 				return nil, fmt.Errorf("imdb api: %s", resp.Error)
@@ -240,4 +306,26 @@ func parseYear(s string) int {
 func isNotFoundAPIError(msg string) bool {
 	m := strings.ToLower(strings.TrimSpace(msg))
 	return strings.Contains(m, "not found")
+}
+
+func isTooManyResultsAPIError(msg string) bool {
+	m := strings.ToLower(strings.TrimSpace(msg))
+	return strings.Contains(m, "too many results")
+}
+
+func isNonFatalSearchAPIError(msg string) bool {
+	return isNotFoundAPIError(msg) || isTooManyResultsAPIError(msg)
+}
+
+func parseOMDbType(v string) model.MediaKind {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "movie":
+		return model.MediaKindMovie
+	case "series":
+		return model.MediaKindSeries
+	case "episode":
+		return model.MediaKindEpisode
+	default:
+		return model.MediaKindUnknown
+	}
 }

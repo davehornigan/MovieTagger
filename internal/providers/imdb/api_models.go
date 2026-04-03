@@ -31,3 +31,16 @@ type omdbEpisodeResponse struct {
 func (r omdbEpisodeResponse) IsSuccess() bool {
 	return strings.EqualFold(strings.TrimSpace(r.Response), "True")
 }
+
+type omdbTitleResponse struct {
+	Title    string `json:"Title"`
+	Year     string `json:"Year"`
+	IMDbID   string `json:"imdbID"`
+	Type     string `json:"Type"`
+	Response string `json:"Response"`
+	Error    string `json:"Error"`
+}
+
+func (r omdbTitleResponse) IsSuccess() bool {
+	return strings.EqualFold(strings.TrimSpace(r.Response), "True")
+}

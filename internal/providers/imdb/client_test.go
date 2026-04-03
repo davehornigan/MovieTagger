@@ -146,6 +146,92 @@ func TestClient_SearchSeries_NotFoundIsNotFatal(t *testing.T) {
 	}
 }
 
+func TestClient_SearchSeries_TooManyResultsIsNotFatal(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		_, _ = w.Write([]byte(`{"Response":"False","Error":"Too many results."}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(Options{
+		APIKey:      "k",
+		BaseURL:     srv.URL,
+		RetryCount:  3,
+		BaseBackoff: time.Millisecond,
+		Sleep:       func(time.Duration) {},
+	})
+
+	got, err := c.SearchSeries(context.Background(), model.ProviderSearchCandidate{QueryTitle: "Show"})
+	if err != nil {
+		t.Fatalf("expected no error for too many results, got %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected zero results, got %d", len(got))
+	}
+	if calls != 1 {
+		t.Fatalf("expected no retries on too many results, calls=%d", calls)
+	}
+}
+
+func TestClient_ResolveByKnownIDs_UsesIMDbID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("i") != "tt0211915" {
+			t.Fatalf("expected imdb id lookup, got query=%s", r.URL.RawQuery)
+		}
+		_, _ = w.Write([]byte(`{"Title":"Amelie","Year":"2001","imdbID":"tt0211915","Type":"movie","Response":"True"}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(Options{
+		APIKey:      "k",
+		BaseURL:     srv.URL,
+		RetryCount:  3,
+		BaseBackoff: time.Millisecond,
+		Sleep:       func(time.Duration) {},
+	})
+
+	got, err := c.ResolveByKnownIDs(context.Background(), model.ProviderSearchCandidate{
+		Kind:     model.MediaKindMovie,
+		KnownIDs: model.ProviderTags{IMDbID: "tt0211915"},
+	})
+	if err != nil {
+		t.Fatalf("ResolveByKnownIDs error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected one result, got %d", len(got))
+	}
+	if got[0].IDs.IMDbID != "tt0211915" || got[0].Kind != model.MediaKindMovie {
+		t.Fatalf("unexpected result: %+v", got[0])
+	}
+}
+
+func TestClient_ResolveByKnownIDs_KindMismatchReturnsEmpty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"Title":"Amelie","Year":"2001","imdbID":"tt0211915","Type":"movie","Response":"True"}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(Options{
+		APIKey:      "k",
+		BaseURL:     srv.URL,
+		RetryCount:  3,
+		BaseBackoff: time.Millisecond,
+		Sleep:       func(time.Duration) {},
+	})
+
+	got, err := c.ResolveByKnownIDs(context.Background(), model.ProviderSearchCandidate{
+		Kind:     model.MediaKindSeries,
+		KnownIDs: model.ProviderTags{IMDbID: "tt0211915"},
+	})
+	if err != nil {
+		t.Fatalf("ResolveByKnownIDs error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected empty result on kind mismatch, got %+v", got)
+	}
+}
+
 func TestClient_LookupEpisode_NotFoundIsNotFatalAndNoRetry(t *testing.T) {
 	var calls int
 	logger := &testLogger{}

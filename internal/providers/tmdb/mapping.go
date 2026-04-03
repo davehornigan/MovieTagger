@@ -65,6 +65,52 @@ func mapSeriesResults(items []tvItem) []model.SelectedMatchResult {
 	return out
 }
 
+func mapMovieDetail(it movieDetailResponse) model.SelectedMatchResult {
+	id := ""
+	if it.ID > 0 {
+		id = strconv.Itoa(it.ID)
+	}
+	title := strings.TrimSpace(it.OriginalTitle)
+	if title == "" {
+		title = strings.TrimSpace(it.Title)
+	}
+	return model.SelectedMatchResult{
+		Provider:      model.ProviderTMDb,
+		Kind:          model.MediaKindMovie,
+		Title:         title,
+		OriginalTitle: strings.TrimSpace(it.OriginalTitle),
+		Year:          yearFromDate(it.ReleaseDate),
+		IDs: model.ProviderTags{
+			IMDbID: strings.TrimSpace(it.ExternalIDs.IMDbID),
+			TMDbID: id,
+		},
+		ProviderReference: id,
+	}
+}
+
+func mapTVDetail(it tvDetailResponse) model.SelectedMatchResult {
+	id := ""
+	if it.ID > 0 {
+		id = strconv.Itoa(it.ID)
+	}
+	title := strings.TrimSpace(it.OriginalName)
+	if title == "" {
+		title = strings.TrimSpace(it.Name)
+	}
+	return model.SelectedMatchResult{
+		Provider:      model.ProviderTMDb,
+		Kind:          model.MediaKindSeries,
+		Title:         title,
+		OriginalTitle: strings.TrimSpace(it.OriginalName),
+		Year:          yearFromDate(it.FirstAirDate),
+		IDs: model.ProviderTags{
+			IMDbID: strings.TrimSpace(it.ExternalIDs.IMDbID),
+			TMDbID: id,
+		},
+		ProviderReference: id,
+	}
+}
+
 func yearFromDate(s string) int {
 	s = strings.TrimSpace(s)
 	if len(s) < 4 {
