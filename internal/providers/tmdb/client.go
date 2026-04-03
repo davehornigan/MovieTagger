@@ -3,6 +3,7 @@ package tmdb
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -153,6 +154,11 @@ func (c *Client) LookupEpisode(ctx context.Context, series model.SelectedMatchRe
 			path := fmt.Sprintf("/3/tv/%s/season/%d/episode/%d", seriesID, episode.SeasonNumber, episode.EpisodeNumber)
 			var resp episodeDetailResponse
 			if err := c.getJSON(ctx, path, q, &resp); err != nil {
+				var hsErr httpStatusError
+				if errors.As(err, &hsErr) && hsErr.StatusCode == http.StatusNotFound {
+					// "Not found" for episode lookup is not fatal and must not fail the app.
+					return model.SelectedMatchResult{}, nil
+				}
 				return model.SelectedMatchResult{}, err
 			}
 
@@ -201,10 +207,18 @@ func (c *Client) getJSON(ctx context.Context, path string, query url.Values, out
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("http status %d", resp.StatusCode)
+		return httpStatusError{StatusCode: resp.StatusCode}
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
 		return err
 	}
 	return nil
+}
+
+type httpStatusError struct {
+	StatusCode int
+}
+
+func (e httpStatusError) Error() string {
+	return fmt.Sprintf("http status %d", e.StatusCode)
 }

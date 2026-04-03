@@ -118,6 +118,71 @@ func TestClient_RetryAndFatalOnFailure(t *testing.T) {
 	}
 }
 
+func TestClient_SearchSeries_NotFoundIsNotFatal(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		_, _ = w.Write([]byte(`{"Response":"False","Error":"Series not found!"}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(Options{
+		APIKey:      "k",
+		BaseURL:     srv.URL,
+		RetryCount:  3,
+		BaseBackoff: time.Millisecond,
+		Sleep:       func(time.Duration) {},
+	})
+
+	got, err := c.SearchSeries(context.Background(), model.ProviderSearchCandidate{QueryTitle: "Unknown Show"})
+	if err != nil {
+		t.Fatalf("expected no error for not found, got %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected zero results, got %d", len(got))
+	}
+	if calls != 1 {
+		t.Fatalf("expected no retries on not found, calls=%d", calls)
+	}
+}
+
+func TestClient_LookupEpisode_NotFoundIsNotFatalAndNoRetry(t *testing.T) {
+	var calls int
+	logger := &testLogger{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		_, _ = w.Write([]byte(`{"Response":"False","Error":"Series not found!"}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(Options{
+		APIKey:      "k",
+		BaseURL:     srv.URL,
+		Logger:      logger,
+		RetryCount:  3,
+		BaseBackoff: time.Millisecond,
+		Sleep:       func(time.Duration) {},
+	})
+
+	got, err := c.LookupEpisode(
+		context.Background(),
+		model.SelectedMatchResult{ProviderReference: "tt1000001"},
+		model.EpisodeInfo{SeasonNumber: 1, EpisodeNumber: 2},
+	)
+	if err != nil {
+		t.Fatalf("expected no error for not found episode, got %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("expected no retries for not found episode, calls=%d", calls)
+	}
+	if logger.retryCount != 0 {
+		t.Fatalf("expected no retry logs, got %d", logger.retryCount)
+	}
+	if got != (model.SelectedMatchResult{}) {
+		t.Fatalf("expected empty result, got %+v", got)
+	}
+}
+
 func TestClient_LookupEpisode_AllowsMissingEpisodeIDForLaterSkip(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"Title":"Pilot","Year":"2004","imdbID":"","seriesID":"tt1000001","Response":"True"}`))

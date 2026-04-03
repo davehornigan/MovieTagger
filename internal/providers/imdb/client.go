@@ -109,6 +109,10 @@ func (c *Client) LookupEpisode(ctx context.Context, series model.SelectedMatchRe
 				return model.SelectedMatchResult{}, err
 			}
 			if !resp.IsSuccess() {
+				if isNotFoundAPIError(resp.Error) {
+					// "Not found" for episode lookup is not fatal and must not fail the app.
+					return model.SelectedMatchResult{}, nil
+				}
 				return model.SelectedMatchResult{}, fmt.Errorf("imdb api: %s", resp.Error)
 			}
 
@@ -159,7 +163,7 @@ func (c *Client) search(ctx context.Context, operation string, queryTitle string
 				return nil, err
 			}
 			if !resp.IsSuccess() {
-				if strings.EqualFold(strings.TrimSpace(resp.Error), "Movie not found!") {
+				if isNotFoundAPIError(resp.Error) {
 					return []model.SelectedMatchResult{}, nil
 				}
 				return nil, fmt.Errorf("imdb api: %s", resp.Error)
@@ -231,4 +235,9 @@ func parseYear(s string) int {
 		}
 	}
 	return 0
+}
+
+func isNotFoundAPIError(msg string) bool {
+	m := strings.ToLower(strings.TrimSpace(msg))
+	return strings.Contains(m, "not found")
 }

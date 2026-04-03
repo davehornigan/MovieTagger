@@ -134,6 +134,43 @@ func TestClient_RetryAndFatalOnFailure(t *testing.T) {
 	}
 }
 
+func TestClient_LookupEpisode_NotFoundIsNotFatalAndNoRetry(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	logger := &testLogger{}
+	c := NewClient(Options{
+		APIKey:      "k",
+		BaseURL:     srv.URL,
+		Logger:      logger,
+		RetryCount:  3,
+		BaseBackoff: time.Millisecond,
+		Sleep:       func(time.Duration) {},
+	})
+
+	got, err := c.LookupEpisode(
+		context.Background(),
+		model.SelectedMatchResult{ProviderReference: "1399"},
+		model.EpisodeInfo{SeasonNumber: 1, EpisodeNumber: 1},
+	)
+	if err != nil {
+		t.Fatalf("expected no error for not found episode, got %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("expected no retries for not found episode, calls=%d", calls)
+	}
+	if logger.retryCount != 0 {
+		t.Fatalf("expected no retry logs, got %d", logger.retryCount)
+	}
+	if got != (model.SelectedMatchResult{}) {
+		t.Fatalf("expected empty result for not found episode, got %+v", got)
+	}
+}
+
 type testLogger struct {
 	mu         sync.Mutex
 	retryCount int

@@ -238,11 +238,26 @@ func (s *Scanner) queryCandidates(ctx context.Context, item model.ScanResultItem
 			if err != nil {
 				return nil, fmt.Errorf("provider %s episode lookup failed: %w", provider.Kind(), err)
 			}
-			candidates = append(candidates, res)
+			if hasEpisodeCandidate(res) {
+				candidates = append(candidates, res)
+			}
 		}
 	}
 
 	return candidates, nil
+}
+
+func hasEpisodeCandidate(c model.SelectedMatchResult) bool {
+	if c.Title != "" || c.OriginalTitle != "" || c.ProviderReference != "" {
+		return true
+	}
+	if c.IDs.HasAny() || c.EpisodeIDs.HasAny() {
+		return true
+	}
+	if c.Episode != nil {
+		return true
+	}
+	return false
 }
 
 func adaptSeriesForProvider(series model.SelectedMatchResult, provider model.ProviderKind) (model.SelectedMatchResult, bool) {
