@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/davehornigan/MovieTagger/internal/config"
@@ -13,21 +14,40 @@ import (
 
 const defaultConfigPath = "config.yaml"
 
+var Version = "dev"
+
 func Run(args []string) error {
 	if len(args) == 0 {
+		printRootHelp()
 		return usageError("missing command")
+	}
+
+	if isHelpArg(args[0]) || args[0] == "help" {
+		printRootHelp()
+		return nil
+	}
+	if isVersionArg(args[0]) || args[0] == "version" {
+		fmt.Fprintf(os.Stdout, "movietagger %s\n", Version)
+		return nil
 	}
 
 	switch args[0] {
 	case "scan":
 		return runScan(args[1:])
 	default:
+		printRootHelp()
 		return usageError(fmt.Sprintf("unknown command %q", args[0]))
 	}
 }
 
 func runScan(args []string) error {
+	if len(args) == 1 && isHelpArg(args[0]) {
+		printScanHelp()
+		return nil
+	}
+
 	if len(args) == 0 {
+		printScanHelp()
 		return usageError("scan requires SCAN-DIR")
 	}
 
@@ -100,6 +120,48 @@ func runScan(args []string) error {
 }
 
 func usageError(msg string) error {
-	usage := "movietagger scan SCAN-DIR [--disable-tmdb] [--disable-imdb] [--no-interactive] [--dry-run]"
+	usage := `movietagger scan SCAN-DIR [--disable-tmdb] [--disable-imdb] [--no-interactive] [--dry-run] [--config PATH] [--log-file PATH]`
 	return fmt.Errorf("%s\nusage: %s", strings.TrimSpace(msg), usage)
+}
+
+func printRootHelp() {
+	fmt.Fprintln(os.Stdout, "MovieTagger CLI")
+	fmt.Fprintln(os.Stdout, "")
+	fmt.Fprintln(os.Stdout, "Usage:")
+	fmt.Fprintln(os.Stdout, "  movietagger scan SCAN-DIR [--disable-tmdb] [--disable-imdb] [--no-interactive] [--dry-run] [--config PATH] [--log-file PATH]")
+	fmt.Fprintln(os.Stdout, "  movietagger --version")
+	fmt.Fprintln(os.Stdout, "  movietagger --help")
+	fmt.Fprintln(os.Stdout, "")
+	fmt.Fprintln(os.Stdout, "Options:")
+	fmt.Fprintln(os.Stdout, "  --help, -h       Show help")
+	fmt.Fprintln(os.Stdout, "  --version, -v    Show version")
+	fmt.Fprintln(os.Stdout, "")
+	fmt.Fprintln(os.Stdout, "Scan options:")
+	fmt.Fprintln(os.Stdout, "  --disable-tmdb   Disable TMDb provider")
+	fmt.Fprintln(os.Stdout, "  --disable-imdb   Disable IMDb provider")
+	fmt.Fprintln(os.Stdout, "  --no-interactive Disable interactive candidate selection")
+	fmt.Fprintln(os.Stdout, "  --dry-run        Build and validate plan without filesystem changes")
+	fmt.Fprintln(os.Stdout, "  --config PATH    Path to YAML config file (default: config.yaml)")
+	fmt.Fprintln(os.Stdout, "  --log-file PATH  Path to log file (default: movietagger.log)")
+}
+
+func printScanHelp() {
+	fmt.Fprintln(os.Stdout, "Usage:")
+	fmt.Fprintln(os.Stdout, "  movietagger scan SCAN-DIR [--disable-tmdb] [--disable-imdb] [--no-interactive] [--dry-run] [--config PATH] [--log-file PATH]")
+	fmt.Fprintln(os.Stdout, "")
+	fmt.Fprintln(os.Stdout, "Options:")
+	fmt.Fprintln(os.Stdout, "  --disable-tmdb   Disable TMDb provider")
+	fmt.Fprintln(os.Stdout, "  --disable-imdb   Disable IMDb provider")
+	fmt.Fprintln(os.Stdout, "  --no-interactive Disable interactive candidate selection")
+	fmt.Fprintln(os.Stdout, "  --dry-run        Build and validate plan without filesystem changes")
+	fmt.Fprintln(os.Stdout, "  --config PATH    Path to YAML config file (default: config.yaml)")
+	fmt.Fprintln(os.Stdout, "  --log-file PATH  Path to log file (default: movietagger.log)")
+}
+
+func isHelpArg(arg string) bool {
+	return arg == "--help" || arg == "-h"
+}
+
+func isVersionArg(arg string) bool {
+	return arg == "--version" || arg == "-v"
 }

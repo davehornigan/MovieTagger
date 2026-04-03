@@ -24,11 +24,25 @@ jobs:
       - name: Run tests
         run: go test ./...
 
+      - name: Calculate next tag (dry-run)
+        id: next_tag
+        uses: mathieudutour/github-tag-action@v6.1
+        with:
+          tag_prefix: ''
+          dry_run: true
+          github_token: ${{ secrets.PAT }}
+
       - name: Build release binaries
         shell: bash
+        env:
+          VERSION: ${{ steps.next_tag.outputs.new_tag }}
         run: |
           set -euo pipefail
           mkdir -p dist
+          version="${VERSION:-}"
+          if [[ -z "$version" ]]; then
+            version="dev"
+          fi
 
           targets=(
             "linux amd64"
@@ -47,8 +61,8 @@ jobs:
             fi
 
             output="dist/movietagger-${goos}-${goarch}${ext}"
-            echo "Building ${output}"
-            GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$output" ./cmd/movietagger
+            echo "Building ${output} (version=${version})"
+            GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X github.com/davehornigan/MovieTagger/internal/cli.Version=${version}" -o "$output" ./cmd/movietagger
           done
 
       - name: Bump version and push tag
