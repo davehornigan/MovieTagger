@@ -60,12 +60,14 @@ func runScan(args []string) error {
 	var disableIMDb bool
 	var noInteractive bool
 	var dryRun bool
+	var skipSeriesEpisodes bool
 	var configPath string
 	var logFilePath string
 
 	fs.BoolVar(&disableTMDB, "disable-tmdb", false, "Disable TMDb provider")
 	fs.BoolVar(&disableIMDb, "disable-imdb", false, "Disable IMDb provider")
 	fs.BoolVar(&noInteractive, "no-interactive", false, "Disable interactive mode")
+	fs.BoolVar(&skipSeriesEpisodes, "skip-series-episodes", false, "Ignore series episode files entirely")
 	fs.BoolVar(&dryRun, "dry-run", false, "Preview changes without renaming")
 	fs.StringVar(&configPath, "config", defaultConfigPath, "Path to YAML config file")
 	fs.StringVar(&logFilePath, "log-file", "movietagger.log", "Path to log file")
@@ -110,6 +112,7 @@ func runScan(args []string) error {
 		DisableTMDB:        disableTMDB,
 		DisableIMDb:        disableIMDb,
 		NoInteractive:      noInteractive,
+		SkipSeriesEpisodes: skipSeriesEpisodes,
 		DryRun:             dryRun,
 		Config:             cfg,
 		Logger:             logger,
@@ -120,7 +123,7 @@ func runScan(args []string) error {
 }
 
 func usageError(msg string) error {
-	usage := `movietagger scan SCAN-DIR [--disable-tmdb] [--disable-imdb] [--no-interactive] [--dry-run] [--config PATH] [--log-file PATH]`
+	usage := `movietagger scan SCAN-DIR [--disable-tmdb] [--disable-imdb] [--no-interactive] [--skip-series-episodes] [--dry-run] [--config PATH] [--log-file PATH]`
 	return fmt.Errorf("%s\nusage: %s", strings.TrimSpace(msg), usage)
 }
 
@@ -128,7 +131,7 @@ func printRootHelp() {
 	fmt.Fprintln(os.Stdout, "MovieTagger CLI")
 	fmt.Fprintln(os.Stdout, "")
 	fmt.Fprintln(os.Stdout, "Usage:")
-	fmt.Fprintln(os.Stdout, "  movietagger scan SCAN-DIR [--disable-tmdb] [--disable-imdb] [--no-interactive] [--dry-run] [--config PATH] [--log-file PATH]")
+	fmt.Fprintln(os.Stdout, "  movietagger scan SCAN-DIR [--disable-tmdb] [--disable-imdb] [--no-interactive] [--skip-series-episodes] [--dry-run] [--config PATH] [--log-file PATH]")
 	fmt.Fprintln(os.Stdout, "  movietagger --version")
 	fmt.Fprintln(os.Stdout, "  movietagger --help")
 	fmt.Fprintln(os.Stdout, "")
@@ -140,6 +143,7 @@ func printRootHelp() {
 	fmt.Fprintln(os.Stdout, "  --disable-tmdb   Disable TMDb provider")
 	fmt.Fprintln(os.Stdout, "  --disable-imdb   Disable IMDb provider")
 	fmt.Fprintln(os.Stdout, "  --no-interactive Disable interactive candidate selection")
+	fmt.Fprintln(os.Stdout, "  --skip-series-episodes  Ignore series episode files entirely")
 	fmt.Fprintln(os.Stdout, "  --dry-run        Build and validate plan without filesystem changes")
 	fmt.Fprintln(os.Stdout, "  --config PATH    Path to YAML config file (default: config.yaml)")
 	fmt.Fprintln(os.Stdout, "  --log-file PATH  Path to log file (default: movietagger.log)")
@@ -147,12 +151,13 @@ func printRootHelp() {
 
 func printScanHelp() {
 	fmt.Fprintln(os.Stdout, "Usage:")
-	fmt.Fprintln(os.Stdout, "  movietagger scan SCAN-DIR [--disable-tmdb] [--disable-imdb] [--no-interactive] [--dry-run] [--config PATH] [--log-file PATH]")
+	fmt.Fprintln(os.Stdout, "  movietagger scan SCAN-DIR [--disable-tmdb] [--disable-imdb] [--no-interactive] [--skip-series-episodes] [--dry-run] [--config PATH] [--log-file PATH]")
 	fmt.Fprintln(os.Stdout, "")
 	fmt.Fprintln(os.Stdout, "Options:")
 	fmt.Fprintln(os.Stdout, "  --disable-tmdb   Disable TMDb provider")
 	fmt.Fprintln(os.Stdout, "  --disable-imdb   Disable IMDb provider")
 	fmt.Fprintln(os.Stdout, "  --no-interactive Disable interactive candidate selection")
+	fmt.Fprintln(os.Stdout, "  --skip-series-episodes  Ignore series episode files entirely")
 	fmt.Fprintln(os.Stdout, "  --dry-run        Build and validate plan without filesystem changes")
 	fmt.Fprintln(os.Stdout, "  --config PATH    Path to YAML config file (default: config.yaml)")
 	fmt.Fprintln(os.Stdout, "  --log-file PATH  Path to log file (default: movietagger.log)")
