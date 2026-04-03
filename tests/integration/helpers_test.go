@@ -23,12 +23,18 @@ func runPipeline(t *testing.T, root string, dryRun bool, fake providers.Metadata
 
 func runPipelineWithLogger(t *testing.T, root string, dryRun bool, fake providers.MetadataProvider) (*scanner.Scanner, *captureLogger, error) {
 	t.Helper()
+	return runPipelineWithLoggerOpts(t, root, dryRun, false, fake)
+}
+
+func runPipelineWithLoggerOpts(t *testing.T, root string, dryRun bool, skipSeriesEpisodes bool, fake providers.MetadataProvider) (*scanner.Scanner, *captureLogger, error) {
+	t.Helper()
 	logger := &captureLogger{}
 	s := scanner.New(scanner.Options{
-		NoInteractive: true,
-		DryRun:        dryRun,
-		Logger:        logger,
-		Providers:     []providers.MetadataProvider{fake},
+		NoInteractive:      true,
+		DryRun:             dryRun,
+		Logger:             logger,
+		Providers:          []providers.MetadataProvider{fake},
+		SkipSeriesEpisodes: skipSeriesEpisodes,
 	})
 	err := s.Scan(context.Background(), root)
 	return s, logger, err

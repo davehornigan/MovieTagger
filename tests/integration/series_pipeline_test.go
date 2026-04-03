@@ -121,3 +121,29 @@ func TestPipeline_NoEpisodeLevelIDsEpisodeSkipped(t *testing.T) {
 	}
 	assertExists(t, ep)
 }
+
+func TestPipeline_SkipSeriesEpisodesLeavesEpisodesUntouched(t *testing.T) {
+	root := t.TempDir()
+	series := filepath.Join(root, "Show (2011) [imdbid-ttshow]")
+	season := filepath.Join(series, "Season 1")
+	mustMkdir(t, season)
+	ep1 := filepath.Join(season, "Show.S01E01.mkv")
+	ep2 := filepath.Join(season, "Show.S01E02.mkv")
+	mustWrite(t, ep1)
+	mustWrite(t, ep2)
+
+	fp := buildSeriesProvider("Show", "ttshow", "", map[string]model.SelectedMatchResult{
+		epKey("ttshow", 1, 1): {Provider: model.ProviderIMDb, Kind: model.MediaKindEpisode, OriginalTitle: "Show", EpisodeIDs: model.ProviderTags{IMDbID: "ttE101", TMDbID: "101"}},
+		epKey("ttshow", 1, 2): {Provider: model.ProviderIMDb, Kind: model.MediaKindEpisode, OriginalTitle: "Show", EpisodeIDs: model.ProviderTags{IMDbID: "ttE102", TMDbID: "102"}},
+	})
+
+	_, _, err := runPipelineWithLoggerOpts(t, root, false, true, fp)
+	if err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+
+	assertExists(t, ep1)
+	assertExists(t, ep2)
+	assertNotExists(t, filepath.Join(season, "Show S01E01 [tmdbid-101] [imdbid-ttE101].mkv"))
+	assertNotExists(t, filepath.Join(season, "Show S01E02 [tmdbid-102] [imdbid-ttE102].mkv"))
+}

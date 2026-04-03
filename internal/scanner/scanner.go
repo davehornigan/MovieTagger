@@ -28,6 +28,7 @@ type Options struct {
 	DisableTMDB        bool
 	DisableIMDb        bool
 	NoInteractive      bool
+	SkipSeriesEpisodes bool
 	DryRun             bool
 	Config             config.Config
 	Logger             logging.Logger
@@ -167,6 +168,11 @@ func (s *Scanner) matchAll(ctx context.Context, scanResult model.ScanResult) ([]
 	}
 
 	for _, item := range episodeItems {
+		if s.opts.SkipSeriesEpisodes {
+			skippedCount++
+			s.opts.Logger.LogSkip(item.Path, "skip_series_episodes")
+			continue
+		}
 		seriesPath := seriesRootPathForEpisode(item.Path)
 		seriesSelection, ok := selectedByPath[seriesPath]
 		if !ok {
