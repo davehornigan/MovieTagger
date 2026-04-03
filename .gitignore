@@ -1,0 +1,51 @@
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+movietagger.log
+
+# Build artifacts
+bin/
+dist/
+build/
+release/
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.out
+*.test
+
+# Go caches
+.gocache/
+.gomodcache/
+coverage.out
+cover.out
+
+# Environment / local overrides
+.env
+.env.*
+!.env.example
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS-generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+Specification.md

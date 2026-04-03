@@ -1,0 +1,4 @@
+imdb:
+  api_key: "your-imdb-api-key"
+tmdb:
+  api_key: "your-tmdb-api-key"
